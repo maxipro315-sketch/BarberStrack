@@ -1,0 +1,27 @@
+{
+  "name": "BarberTrack - Control para barberos",
+  "short_name": "BarberTrack",
+  "description": "Registro de cortes, cobros y pagos pendientes para barberos.",
+  "start_url": "./barbertrack_gesti_n_para_barberos.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0B0F17",
+  "theme_color": "#0B0F17",
+  "lang": "es-AR",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "icons/barbertrack-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/barbertrack-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

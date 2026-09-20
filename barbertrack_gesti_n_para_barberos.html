@@ -1,0 +1,1363 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>BarberTrack - Control de Cortes e Ingresos</title>
+    <meta name="theme-color" content="#0B0F17">
+    <meta name="description" content="Registro de cortes, cobros y pagos pendientes para barberos.">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="icons/barbertrack-192.png" type="image/png">
+    <link rel="apple-touch-icon" href="icons/barbertrack-apple.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="BarberTrack">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Chart.js para gráficos -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Firebase Authentication y Firestore -->
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        gold: {
+                            400: '#FACC15',
+                            500: '#EAB308',
+                            600: '#CA8A04',
+                            amber: '#D97706'
+                        },
+                        dark: {
+                            900: '#0B0F17',
+                            800: '#111827',
+                            700: '#1F2937',
+                            600: '#374151'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Plus Jakarta Sans', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #0B0F17;
+            color: #F3F4F6;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* Gradient backgrounds & borders */
+        .gold-gradient-bg {
+            background: linear-gradient(135deg, #F59E0B 0%, #D97706 50%, #B45309 100%);
+        }
+        .gold-gradient-text {
+            background: linear-gradient(135deg, #FDE047 0%, #F59E0B 50%, #D97706 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .gold-border-glow {
+            box-shadow: 0 0 15px rgba(245, 158, 11, 0.15);
+        }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #111827;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #374151;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #D97706;
+        }
+
+        /* Animation classes */
+        .tab-content {
+            display: none;
+            opacity: 0;
+            transition: opacity 0.25s ease-in-out;
+        }
+        .tab-content.active {
+            display: block;
+            opacity: 1;
+        }
+
+        /* Toast notification */
+        #toast {
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s ease;
+        }
+
+        #registration-success.active .success-card { animation: success-card-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) both; }
+        #registration-success.active .success-ring { animation: success-ring 0.7s ease-out both; }
+        #registration-success.active .success-check { animation: success-check 0.35s 0.2s ease-out both; }
+        #registration-success.active .success-copy { animation: success-copy 0.35s 0.25s ease-out both; }
+        @keyframes success-card-in { from { opacity: 0; transform: translateY(18px) scale(.94); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        @keyframes success-ring { from { opacity: .8; transform: scale(.45); } to { opacity: 0; transform: scale(1.65); } }
+        @keyframes success-check { from { opacity: 0; transform: scale(.25) rotate(-18deg); } to { opacity: 1; transform: scale(1) rotate(0); } }
+        @keyframes success-copy { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body class="bg-dark-900 text-gray-100 min-h-screen pb-24 md:pb-6">
+
+    <!-- Top Header -->
+    <header class="sticky top-0 z-40 bg-dark-800/90 backdrop-blur-md border-b border-gray-800 px-4 py-3 shadow-md">
+        <div class="max-w-3xl mx-auto flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl gold-gradient-bg flex items-center justify-center text-dark-900 font-extrabold text-xl shadow-lg">
+                    <i class="fa-solid fa-scissors"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-extrabold tracking-tight leading-none gold-gradient-text">BarberTrack</h1>
+                    <p class="text-xs text-gray-400 mt-0.5" id="header-date">Cargando fecha...</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-2">
+                <button onclick="installPwa()" id="install-app-button" class="hidden p-2 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 transition-colors" aria-label="Instalar aplicación" title="Instalar aplicación">
+                    <i class="fa-solid fa-download text-lg"></i>
+                </button>
+                <button onclick="openAuthModal()" id="account-button" class="hidden p-2 rounded-lg bg-dark-700 hover:bg-gray-700 text-gray-300 transition-colors" aria-label="Cuenta">
+                    <i class="fa-solid fa-user text-lg"></i>
+                </button>
+                <button onclick="switchTab('config')" class="p-2 rounded-lg bg-dark-700 hover:bg-gray-700 text-gray-300 transition-colors">
+                    <i class="fa-solid fa-gear text-lg"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="max-w-3xl mx-auto px-4 pt-4">
+
+        <!-- TAB 1: REGISTRAR CORTE -->
+        <section id="tab-register" class="tab-content active space-y-5">
+            <!-- Header Quick Stats -->
+            <div class="grid grid-cols-2 gap-3">
+                <div class="bg-dark-800 border border-gray-800 p-3.5 rounded-2xl flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Cortes Hoy</p>
+                        <p class="text-2xl font-black text-white mt-0.5" id="quick-count-today">0</p>
+                    </div>
+                    <div class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center text-lg">
+                        <i class="fa-solid fa-user-check"></i>
+                    </div>
+                </div>
+                <div class="bg-dark-800 border border-gray-800 p-3.5 rounded-2xl flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Caja Hoy</p>
+                        <p class="text-2xl font-black text-gold-400 mt-0.5" id="quick-total-today">$0</p>
+                    </div>
+                    <div class="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-lg">
+                        <i class="fa-solid fa-sack-dollar"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Form Card -->
+            <div class="bg-dark-800 border border-gray-800/80 rounded-2xl p-4 sm:p-5 shadow-xl">
+                <h2 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                    <i class="fa-solid fa-plus-circle text-amber-500"></i> Registrar Nuevo Servicio
+                </h2>
+
+                <form id="form-register-cut" onsubmit="handleRegisterCut(event)" class="space-y-4">
+                    <!-- Quick Select Service -->
+                    <div>
+                        <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
+                            Seleccionar Servicio
+                        </label>
+                        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5" id="services-buttons-container">
+                            <!-- Los botones se generan dinámicamente -->
+                        </div>
+                    </div>
+
+                    <!-- Precio del corte seleccionado -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-300 mb-1">Servicio</label>
+                            <input type="text" id="cut-service-name" value="Corte" readonly
+                                class="w-full bg-dark-900 border border-gray-700 rounded-xl px-3.5 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-300 mb-1">Precio (ARS)</label>
+                            <div class="relative">
+                                <span class="absolute left-3.5 top-2.5 text-gray-400 text-sm">$</span>
+                                <input type="number" id="cut-price" required min="0" step="50" placeholder="0" 
+                                    class="w-full bg-dark-900 border border-gray-700 rounded-xl pl-8 pr-3.5 py-2.5 text-white font-bold placeholder-gray-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 text-sm">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Client Name (Optional) -->
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-300 mb-1">Nombre Cliente <span class="text-gray-500 font-normal">(Opcional)</span></label>
+                        <div class="relative">
+                            <span class="absolute left-3.5 top-2.5 text-gray-500 text-sm"><i class="fa-solid fa-user"></i></span>
+                            <input type="text" id="cut-client" placeholder="Ej: Juan Pérez" 
+                                class="w-full bg-dark-900 border border-gray-700 rounded-xl pl-9 pr-3.5 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 text-sm">
+                        </div>
+                    </div>
+
+                    <!-- Payment Method Select -->
+                    <div>
+                        <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Método de Pago</label>
+                        <div class="grid grid-cols-3 gap-2" id="payment-methods-selector">
+                            <button type="button" onclick="selectPaymentMethod('Efectivo')" id="pm-efectivo" 
+                                class="pm-btn active py-2.5 px-3 rounded-xl border text-xs font-bold flex flex-col sm:flex-row items-center justify-center gap-1.5 transition-all bg-amber-500/10 border-amber-500 text-amber-400">
+                                <i class="fa-solid fa-money-bill-wave"></i> Efectivo
+                            </button>
+                            <button type="button" onclick="selectPaymentMethod('Transferencia')" id="pm-transferencia" 
+                                class="pm-btn py-2.5 px-3 rounded-xl border border-gray-700 bg-dark-900 text-gray-400 text-xs font-bold flex flex-col sm:flex-row items-center justify-center gap-1.5 transition-all">
+                                <i class="fa-solid fa-arrow-right-arrow-left"></i> Transfer.
+                            </button>
+                            <button type="button" onclick="selectPaymentMethod('Fiado')" id="pm-fiado" 
+                                class="pm-btn py-2.5 px-3 rounded-xl border border-gray-700 bg-dark-900 text-gray-400 text-xs font-bold flex flex-col sm:flex-row items-center justify-center gap-1.5 transition-all">
+                                <i class="fa-solid fa-hourglass-half"></i> Fiado
+                            </button>
+                        </div>
+                        <input type="hidden" id="cut-payment-method" value="Efectivo">
+                    </div>
+
+                    <!-- Submit Button -->
+                    <button type="submit" 
+                        class="w-full py-3.5 px-4 rounded-xl gold-gradient-bg text-dark-900 font-extrabold text-base shadow-lg shadow-amber-500/20 active:scale-[0.98] transition-transform flex items-center justify-center gap-2 mt-2">
+                        <i class="fa-solid fa-check text-lg"></i> REGISTRAR CORTE
+                    </button>
+                </form>
+            </div>
+        </section>
+
+        <!-- TAB 2: HISTORIAL DEL DÍA -->
+        <section id="tab-history" class="tab-content space-y-4">
+            <!-- Search & Filter Controls -->
+            <div class="bg-dark-800 p-3.5 rounded-2xl border border-gray-800 space-y-3">
+                <div class="relative">
+                    <span class="absolute left-3.5 top-3 text-gray-500 text-sm"><i class="fa-solid fa-magnifying-glass"></i></span>
+                    <input type="text" id="search-history" oninput="renderHistory()" placeholder="Buscar cliente o servicio..." 
+                        class="w-full bg-dark-900 border border-gray-700 rounded-xl pl-9 pr-3.5 py-2 text-white text-sm focus:outline-none focus:border-amber-500">
+                </div>
+                <div class="flex items-center gap-2 overflow-x-auto pb-1">
+                    <span class="text-xs text-gray-400 font-semibold uppercase">Filtrar:</span>
+                    <button onclick="setFilterPayment('ALL')" id="filter-pm-all" class="filter-pm-btn active px-3 py-1 rounded-lg text-xs font-bold bg-amber-500 text-dark-900 whitespace-nowrap">Todos</button>
+                    <button onclick="setFilterPayment('Efectivo')" id="filter-pm-efectivo" class="filter-pm-btn px-3 py-1 rounded-lg text-xs font-bold bg-dark-700 text-gray-300 whitespace-nowrap">Efectivo</button>
+                    <button onclick="setFilterPayment('Transferencia')" id="filter-pm-transferencia" class="filter-pm-btn px-3 py-1 rounded-lg text-xs font-bold bg-dark-700 text-gray-300 whitespace-nowrap">Transferencia</button>
+                    <button onclick="setFilterPayment('Fiado')" id="filter-pm-fiado" class="filter-pm-btn px-3 py-1 rounded-lg text-xs font-bold bg-dark-700 text-gray-300 whitespace-nowrap">Fiado</button>
+                </div>
+            </div>
+
+            <!-- List Container -->
+            <div class="space-y-2.5" id="history-list-container">
+                <!-- Se llena mediante JS -->
+            </div>
+        </section>
+
+        <!-- TAB 3: PAGOS PENDIENTES -->
+        <section id="tab-pending" class="tab-content space-y-4">
+            <div class="bg-dark-800 border border-rose-500/20 rounded-2xl p-4">
+                <div class="flex items-center justify-between gap-3">
+                    <div>
+                        <h2 class="font-bold text-white"><i class="fa-solid fa-hourglass-half text-rose-400 mr-2"></i>Pagos pendientes</h2>
+                        <p class="text-xs text-gray-400 mt-1">Marca el cobro cuando el cliente pague.</p>
+                    </div>
+                    <span id="pending-total-badge" class="rounded-full bg-rose-500/10 border border-rose-500/20 px-2.5 py-1 text-xs font-extrabold text-rose-400">$0</span>
+                </div>
+            </div>
+            <div class="space-y-2.5" id="pending-list-container"></div>
+        </section>
+
+        <!-- TAB 4: RESUMEN / REPORTES -->
+        <section id="tab-reports" class="tab-content space-y-5">
+            <!-- Date Filter Header -->
+            <div class="flex items-center justify-between bg-dark-800 p-3 rounded-2xl border border-gray-800">
+                <span class="text-xs font-bold uppercase text-gray-400"><i class="fa-solid fa-chart-line text-amber-500 mr-1.5"></i> Resumen de Rendimiento</span>
+                <span class="text-xs font-semibold bg-amber-500/10 text-amber-400 px-2.5 py-1 rounded-full border border-amber-500/20" id="current-month-badge">Mes Actual</span>
+            </div>
+
+            <!-- Metric Cards (Hoy / Semana / Mes) -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <!-- Hoy -->
+                <div class="bg-gradient-to-br from-dark-800 to-dark-700 border border-gray-800 p-4 rounded-2xl relative overflow-hidden">
+                    <div class="absolute -right-2 -bottom-2 text-dark-900/40 text-6xl font-black">
+                        <i class="fa-solid fa-calendar-day"></i>
+                    </div>
+                    <div class="relative z-10">
+                        <span class="text-xs font-bold text-amber-400 tracking-wider uppercase">HOY</span>
+                        <h3 class="text-2xl font-extrabold text-white mt-1" id="report-today-total">$0</h3>
+                        <p class="text-xs text-gray-400 mt-1 font-medium"><span id="report-today-count" class="text-white font-bold">0</span> cortes realizados</p>
+                    </div>
+                </div>
+
+                <!-- Esta Semana -->
+                <div class="bg-gradient-to-br from-dark-800 to-dark-700 border border-gray-800 p-4 rounded-2xl relative overflow-hidden">
+                    <div class="absolute -right-2 -bottom-2 text-dark-900/40 text-6xl font-black">
+                        <i class="fa-solid fa-calendar-week"></i>
+                    </div>
+                    <div class="relative z-10">
+                        <span class="text-xs font-bold text-blue-400 tracking-wider uppercase">ESTA SEMANA</span>
+                        <h3 class="text-2xl font-extrabold text-white mt-1" id="report-week-total">$0</h3>
+                        <p class="text-xs text-gray-400 mt-1 font-medium"><span id="report-week-count" class="text-white font-bold">0</span> cortes realizados</p>
+                    </div>
+                </div>
+
+                <!-- Este Mes -->
+                <div class="bg-gradient-to-br from-dark-800 to-dark-700 border border-amber-500/30 p-4 rounded-2xl relative overflow-hidden gold-border-glow">
+                    <div class="absolute -right-2 -bottom-2 text-dark-900/40 text-6xl font-black">
+                        <i class="fa-solid fa-calendar-days"></i>
+                    </div>
+                    <div class="relative z-10">
+                        <span class="text-xs font-bold text-emerald-400 tracking-wider uppercase">ESTE MES</span>
+                        <h3 class="text-2xl font-extrabold text-gold-400 mt-1" id="report-month-total">$0</h3>
+                        <p class="text-xs text-gray-400 mt-1 font-medium"><span id="report-month-count" class="text-white font-bold">0</span> cortes realizados</p>
+                    </div>
+                </div>
+
+                <div class="bg-gradient-to-br from-dark-800 to-dark-700 border border-rose-500/25 p-4 rounded-2xl relative overflow-hidden">
+                    <div class="absolute -right-2 -bottom-2 text-dark-900/40 text-6xl font-black"><i class="fa-solid fa-hourglass-half"></i></div>
+                    <div class="relative z-10">
+                        <span class="text-xs font-bold text-rose-400 tracking-wider uppercase">PENDIENTE</span>
+                        <h3 class="text-2xl font-extrabold text-rose-400 mt-1" id="report-pending-total">$0</h3>
+                        <p class="text-xs text-gray-400 mt-1 font-medium"><span id="report-pending-count" class="text-white font-bold">0</span> fiados este mes</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Section -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Payment methods breakdown -->
+                <div class="bg-dark-800 p-4 rounded-2xl border border-gray-800">
+                    <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center justify-between">
+                        <span>Ingresos por Método de Pago</span>
+                        <i class="fa-solid fa-pie-chart text-amber-500"></i>
+                    </h4>
+                    <div class="h-48 relative flex items-center justify-center">
+                        <canvas id="chart-payment-methods"></canvas>
+                    </div>
+                </div>
+
+                <!-- Top Services Breakdown -->
+                <div class="bg-dark-800 p-4 rounded-2xl border border-gray-800">
+                    <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center justify-between">
+                        <span>Servicios Más Populares</span>
+                        <i class="fa-solid fa-chart-bar text-amber-500"></i>
+                    </h4>
+                    <div class="h-48 relative flex items-center justify-center">
+                        <canvas id="chart-top-services"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 4: CONFIGURACIÓN -->
+        <section id="tab-config" class="tab-content space-y-5">
+            <!-- Services Management -->
+            <div class="bg-dark-800 border border-gray-800 rounded-2xl p-4 sm:p-5">
+                <h3 class="text-base font-bold text-white mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-tags text-amber-500"></i> Servicios y precios
+                </h3>
+                <p class="text-xs text-gray-400 mb-4">Añade servicios rápidos y define el precio de cada uno en pesos argentinos.</p>
+
+                <!-- Form Add Service -->
+                <form onsubmit="handleSaveServiceConfig(event)" class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mb-4 pb-4 border-b border-gray-700/60">
+                    <input type="text" id="config-service-name" placeholder="Servicio (Ej: Barba)" required maxlength="40"
+                        class="bg-dark-900 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500">
+                    <input type="number" id="config-service-price" placeholder="Precio (ARS)" required min="0" step="100"
+                        class="bg-dark-900 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500">
+                    <button type="submit" class="bg-amber-500 hover:bg-amber-600 text-dark-900 font-bold px-3 py-2 rounded-xl text-sm transition-colors">
+                        <i class="fa-solid fa-plus mr-1"></i> Añadir servicio
+                    </button>
+                </form>
+
+                <!-- List of current services -->
+                <div class="space-y-2" id="config-services-list">
+                    <!-- Dinámico -->
+                </div>
+            </div>
+
+            <!-- Data Management -->
+            <div class="bg-dark-800 border border-gray-800 rounded-2xl p-4 sm:p-5 space-y-3">
+                <h3 class="text-base font-bold text-white mb-2 flex items-center gap-2">
+                    <i class="fa-solid fa-database text-amber-500"></i> Gestión de Datos
+                </h3>
+                <p class="text-xs text-gray-400">Los datos se guardan en este dispositivo (`localStorage`). Puedes cargar datos de demostración o reiniciar todo.</p>
+                
+                <div class="flex flex-col sm:flex-row gap-2 pt-2">
+                    <button onclick="loadMockData()" class="flex-1 py-2.5 px-3 bg-dark-700 hover:bg-gray-700 text-amber-400 rounded-xl text-xs font-bold border border-amber-500/20 flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i> Cargar Datos de Prueba
+                    </button>
+                    <button onclick="confirmClearAllData()" class="flex-1 py-2.5 px-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl text-xs font-bold border border-red-500/20 flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-trash-can"></i> Borrar Todos los Registros
+                    </button>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Bottom Mobile Navigation Bar -->
+    <nav class="fixed bottom-0 left-0 right-0 z-50 bg-dark-800/95 backdrop-blur-lg border-t border-gray-800 px-2 py-2">
+        <div class="max-w-md mx-auto flex justify-around items-center">
+            <button onclick="switchTab('register')" id="nav-btn-register" class="nav-btn active flex flex-col items-center py-1 px-3 rounded-xl transition-all text-amber-500">
+                <i class="fa-solid fa-scissors text-lg"></i>
+                <span class="text-[10px] font-bold mt-1">Registrar</span>
+            </button>
+            <button onclick="switchTab('history')" id="nav-btn-history" class="nav-btn flex flex-col items-center py-1 px-3 rounded-xl transition-all text-gray-400 hover:text-gray-200">
+                <i class="fa-solid fa-clock-rotate-left text-lg"></i>
+                <span class="text-[10px] font-bold mt-1">Historial</span>
+            </button>
+            <button onclick="switchTab('pending')" id="nav-btn-pending" class="nav-btn flex flex-col items-center py-1 px-3 rounded-xl transition-all text-gray-400 hover:text-gray-200">
+                <i class="fa-solid fa-hourglass-half text-lg"></i>
+                <span class="text-[10px] font-bold mt-1">Pendientes</span>
+            </button>
+            <button onclick="switchTab('reports')" id="nav-btn-reports" class="nav-btn flex flex-col items-center py-1 px-3 rounded-xl transition-all text-gray-400 hover:text-gray-200">
+                <i class="fa-solid fa-chart-pie text-lg"></i>
+                <span class="text-[10px] font-bold mt-1">Resumen</span>
+            </button>
+            <button onclick="switchTab('config')" id="nav-btn-config" class="nav-btn flex flex-col items-center py-1 px-3 rounded-xl transition-all text-gray-400 hover:text-gray-200">
+                <i class="fa-solid fa-gear text-lg"></i>
+                <span class="text-[10px] font-bold mt-1">Ajustes</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Modal Edit Cut -->
+    <div id="modal-edit" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="bg-dark-800 border border-gray-700 rounded-2xl p-5 w-full max-w-md shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b border-gray-700 pb-3">
+                <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-pen-to-square text-amber-500"></i> Editar Registro
+                </h3>
+                <button onclick="closeEditModal()" class="text-gray-400 hover:text-white p-1">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+            
+            <form id="form-edit-cut" onsubmit="handleSaveEditCut(event)" class="space-y-3">
+                <input type="hidden" id="edit-cut-id">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-300 mb-1">Servicio</label>
+                    <input type="text" id="edit-cut-service" required class="w-full bg-dark-900 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm focus:border-amber-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-300 mb-1">Precio ($)</label>
+                    <input type="number" id="edit-cut-price" required min="0" step="50" class="w-full bg-dark-900 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm focus:border-amber-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-300 mb-1">Cliente</label>
+                    <input type="text" id="edit-cut-client" class="w-full bg-dark-900 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm focus:border-amber-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-300 mb-1">Método de Pago</label>
+                    <select id="edit-cut-payment" class="w-full bg-dark-900 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm focus:border-amber-500 focus:outline-none">
+                        <option value="Efectivo">Efectivo</option>
+                        <option value="Transferencia">Transferencia</option>
+                        <option value="Fiado">Fiado</option>
+                    </select>
+                </div>
+
+                <div class="flex gap-2 pt-2">
+                    <button type="button" onclick="closeEditModal()" class="flex-1 py-2.5 rounded-xl border border-gray-700 text-gray-300 font-bold text-sm">Cancelar</button>
+                    <button type="submit" class="flex-1 py-2.5 rounded-xl gold-gradient-bg text-dark-900 font-extrabold text-sm">Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Custom Alert/Confirm (Sustituto sin alert()) -->
+    <div id="modal-confirm" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="bg-dark-800 border border-gray-700 rounded-2xl p-5 w-full max-w-sm text-center shadow-2xl space-y-4">
+            <div class="w-12 h-12 bg-red-500/10 text-red-500 rounded-full flex items-center justify-center mx-auto text-xl">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+            </div>
+            <h3 class="text-base font-bold text-white" id="confirm-title">¿Estás seguro?</h3>
+            <p class="text-xs text-gray-400" id="confirm-message">Esta acción borrará los registros permanentemente.</p>
+            <div class="flex gap-2 pt-2">
+                <button id="confirm-btn-cancel" class="flex-1 py-2.5 rounded-xl border border-gray-700 text-gray-300 font-bold text-xs">Cancelar</button>
+                <button id="confirm-btn-accept" class="flex-1 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white font-bold text-xs">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Component -->
+    <div id="toast" class="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-emerald-500 text-dark-900 font-bold px-4 py-2.5 rounded-full shadow-2xl flex items-center gap-2 text-xs opacity-0 pointer-events-none translate-y-[-20px]">
+        <i class="fa-solid fa-circle-check text-base"></i>
+        <span id="toast-message">Operación realizada con éxito</span>
+    </div>
+
+    <!-- Confirmación visual de registro -->
+    <div id="registration-success" class="fixed inset-0 z-[60] hidden items-center justify-center bg-dark-900/80 backdrop-blur-sm p-5" role="status" aria-live="polite">
+        <div class="success-card w-full max-w-xs rounded-3xl bg-dark-800 border border-emerald-400/30 p-7 text-center shadow-2xl">
+            <div class="relative mx-auto mb-5 flex h-24 w-24 items-center justify-center">
+                <span class="success-ring absolute h-20 w-20 rounded-full border-2 border-emerald-400"></span>
+                <span class="success-check relative flex h-20 w-20 items-center justify-center rounded-full bg-emerald-500 text-4xl text-dark-900 shadow-lg shadow-emerald-500/30"><i class="fa-solid fa-check"></i></span>
+            </div>
+            <div class="success-copy">
+                <p class="text-lg font-extrabold text-white">Corte registrado</p>
+                <p class="mt-1 text-sm text-gray-400" id="registration-success-service">Corte</p>
+                <p class="mt-4 text-2xl font-black text-emerald-400" id="registration-success-price">$0</p>
+                <button type="button" onclick="closeRegistrationSuccess()" class="mt-6 w-full rounded-xl bg-emerald-500 py-3 text-sm font-extrabold text-dark-900 transition-colors hover:bg-emerald-400">
+                    Continuar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cuenta Firebase -->
+    <div id="auth-modal" class="fixed inset-0 z-[70] hidden items-center justify-center overflow-y-auto bg-dark-900/95 backdrop-blur-md p-4 sm:p-6">
+        <div class="w-full max-w-md overflow-hidden rounded-[28px] border border-gray-700/80 bg-dark-800 shadow-2xl shadow-black/40">
+            <div class="relative overflow-hidden border-b border-gray-700/70 bg-gradient-to-br from-amber-500/15 via-dark-800 to-dark-800 px-6 pb-6 pt-7 sm:px-8">
+                <div class="absolute -right-10 -top-12 h-36 w-36 rounded-full border border-amber-400/10"></div>
+                <button type="button" onclick="closeAuthModal()" class="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-xl text-gray-400 transition hover:bg-white/10 hover:text-white" aria-label="Cerrar cuenta">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+                <div class="relative flex items-center gap-3">
+                    <div class="flex h-12 w-12 items-center justify-center rounded-2xl gold-gradient-bg text-xl text-dark-900 shadow-lg shadow-amber-500/20"><i class="fa-solid fa-scissors"></i></div>
+                    <div><p class="text-[10px] font-extrabold uppercase tracking-[.2em] text-amber-400">BarberTrack</p><p class="mt-1 text-xs text-gray-400">Tu jornada, siempre a mano</p></div>
+                </div>
+                <h2 class="relative mt-7 text-2xl font-extrabold tracking-tight text-white" id="auth-title">Tu cuenta BarberTrack</h2>
+                <p class="relative mt-2 max-w-xs text-sm leading-6 text-gray-400" id="auth-subtitle">Ingresá para sincronizar tus cortes, servicios y cobros entre dispositivos.</p>
+            </div>
+            <div class="px-6 py-6 sm:px-8">
+                <form id="auth-form" onsubmit="handleAuth(event)" class="space-y-4">
+                    <div><label for="auth-email" class="mb-1.5 block text-[11px] font-extrabold uppercase tracking-wider text-gray-400">Correo electrónico</label><input id="auth-email" type="email" required autocomplete="email" placeholder="vos@ejemplo.com" class="w-full rounded-xl border border-gray-700 bg-dark-900 px-3.5 py-3.5 text-sm text-white placeholder-gray-600 outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-500/10"></div>
+                    <div><label for="auth-password" class="mb-1.5 block text-[11px] font-extrabold uppercase tracking-wider text-gray-400">Contraseña</label><input id="auth-password" type="password" required minlength="6" autocomplete="current-password" placeholder="Mínimo 6 caracteres" class="w-full rounded-xl border border-gray-700 bg-dark-900 px-3.5 py-3.5 text-sm text-white placeholder-gray-600 outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-500/10"></div>
+                <p id="auth-error" class="hidden text-xs font-semibold text-red-400"></p>
+                    <button id="auth-submit" type="submit" class="w-full rounded-xl gold-gradient-bg py-3.5 text-sm font-extrabold text-dark-900 shadow-lg shadow-amber-500/10 transition hover:brightness-110">Ingresar</button>
+                </form>
+                <div class="my-5 flex items-center gap-3"><div class="h-px flex-1 bg-gray-700/70"></div><span class="text-[10px] font-bold uppercase tracking-wider text-gray-600">o</span><div class="h-px flex-1 bg-gray-700/70"></div></div>
+                <button id="auth-toggle" type="button" onclick="toggleAuthMode()" class="w-full rounded-xl border border-gray-700 py-3 text-xs font-extrabold text-amber-400 transition hover:border-amber-500/60 hover:bg-amber-500/5">Crear una cuenta nueva</button>
+                <button id="auth-logout" type="button" onclick="signOutUser()" class="hidden mt-4 w-full rounded-xl border border-red-500/30 py-2.5 text-xs font-bold text-red-400">Cerrar sesión</button>
+                <p class="mt-5 text-center text-[11px] leading-5 text-gray-500"><i class="fa-solid fa-cloud-check mr-1 text-emerald-400"></i> Tus datos se sincronizan de forma privada con tu cuenta.</p>
+                <p id="firebase-setup-note" class="hidden mt-4 text-center text-xs text-amber-400">Agregá la configuración de Firebase en este archivo para activar las cuentas.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ESTADO GLOBAL Y CONFIGURACIÓN INICIAL
+        const STORAGE_KEY_CUTS = 'barber_track_cuts_v1';
+        const STORAGE_KEY_SERVICES = 'barber_track_services_v2';
+
+        // Pegá aquí la configuración de tu app web desde Firebase Console.
+        const FIREBASE_CONFIG = {
+            apiKey: 'AIzaSyDvtr4lJ0tztJdZN8v73io7vvij8IKvbm0',
+            authDomain: 'barbertrack-7fcc9.firebaseapp.com',
+            projectId: 'barbertrack-7fcc9',
+            storageBucket: 'barbertrack-7fcc9.firebasestorage.app',
+            messagingSenderId: '232441878257',
+            appId: '1:232441878257:web:afd4e842bfd23c5fd57b50'
+        };
+
+        // Servicios por defecto iniciales
+        const DEFAULT_SERVICES = [{ id: 'corte', name: 'Corte', price: 14000 }];
+
+        let cuts = [];
+        let services = [];
+        let currentFilterPayment = 'ALL';
+        let chartPaymentInstance = null;
+        let chartServicesInstance = null;
+        let firebaseAuth = null;
+        let firestore = null;
+        let currentUser = null;
+        let isRegisterMode = false;
+        let cloudSyncInProgress = false;
+        let cloudSyncPending = false;
+        let deferredInstallPrompt = null;
+
+        // INICIALIZACIÓN DE LA APP AL CÁRGAR LA PÁGINA
+        window.onload = function() {
+            updateHeaderDate();
+            registerPwa();
+            window.addEventListener('online', () => {
+                if (currentUser) syncDataToCloud();
+            });
+            initializeFirebase();
+        };
+
+        function registerPwa() {
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('./service-worker.js').catch(error => console.warn('PWA no disponible:', error));
+            }
+            window.addEventListener('beforeinstallprompt', event => {
+                event.preventDefault();
+                deferredInstallPrompt = event;
+                document.getElementById('install-app-button').classList.remove('hidden');
+            });
+            window.addEventListener('appinstalled', () => {
+                deferredInstallPrompt = null;
+                document.getElementById('install-app-button').classList.add('hidden');
+                showToast('BarberTrack instalada');
+            });
+        }
+
+        async function installPwa() {
+            if (!deferredInstallPrompt) {
+                showToast('En iPhone: Compartir > Agregar a inicio');
+                return;
+            }
+            deferredInstallPrompt.prompt();
+            await deferredInstallPrompt.userChoice;
+            deferredInstallPrompt = null;
+            document.getElementById('install-app-button').classList.add('hidden');
+        }
+
+        function refreshInterface() {
+            renderServiceButtons();
+            renderConfigServicesList();
+            updateDashboard();
+            renderHistory();
+        }
+
+        function isFirebaseConfigured() {
+            return Boolean(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.authDomain && FIREBASE_CONFIG.projectId && FIREBASE_CONFIG.appId);
+        }
+
+        function initializeFirebase() {
+            if (!isFirebaseConfigured() || typeof firebase === 'undefined') {
+                loadDataFromStorage();
+                refreshInterface();
+                document.getElementById('account-button').classList.remove('hidden');
+                return;
+            }
+            firebase.initializeApp(FIREBASE_CONFIG);
+            firebaseAuth = firebase.auth();
+            firestore = firebase.firestore();
+            firebaseAuth.onAuthStateChanged(async user => {
+                currentUser = user;
+                document.getElementById('account-button').classList.remove('hidden');
+                if (user) {
+                    loadDataFromStorage(user.uid);
+                    refreshInterface();
+                    closeAuthModal();
+                    await loadDataFromCloud();
+                } else {
+                    loadDataFromStorage();
+                    refreshInterface();
+                    openAuthModal();
+                }
+            });
+        }
+
+        // FECHA EN ENCABEZADO
+        function updateHeaderDate() {
+            const now = new Date();
+            const options = { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' };
+            const formatted = now.toLocaleDateString('es-ES', options);
+            document.getElementById('header-date').innerText = formatted.charAt(0).toUpperCase() + formatted.slice(1);
+            
+            const monthOptions = { month: 'long', year: 'numeric' };
+            document.getElementById('current-month-badge').innerText = now.toLocaleDateString('es-ES', monthOptions).toUpperCase();
+        }
+
+        // CARGA Y GUARDADO DE DATOS (LOCALSTORAGE)
+        function getCacheKey(key, userId = currentUser?.uid) {
+            return userId ? `${key}_${userId}` : key;
+        }
+
+        function loadDataFromStorage(userId = currentUser?.uid) {
+            const storedCuts = localStorage.getItem(getCacheKey(STORAGE_KEY_CUTS, userId));
+            const storedServices = localStorage.getItem(getCacheKey(STORAGE_KEY_SERVICES, userId));
+
+            cuts = storedCuts ? JSON.parse(storedServices ? storedCuts : '[]') : [];
+            const savedServices = storedServices ? JSON.parse(storedServices) : [];
+            services = savedServices.length ? savedServices : [...DEFAULT_SERVICES];
+            
+            if(!storedCuts) cuts = [];
+        }
+
+        function saveDataToStorage() {
+            localStorage.setItem(getCacheKey(STORAGE_KEY_CUTS), JSON.stringify(cuts));
+            localStorage.setItem(getCacheKey(STORAGE_KEY_SERVICES), JSON.stringify(services));
+            localStorage.setItem(getCacheKey('barber_track_sync_pending'), 'true');
+            updateDashboard();
+            syncDataToCloud();
+        }
+
+        async function loadDataFromCloud() {
+            if (!firestore || !currentUser || !navigator.onLine) return;
+            try {
+                const cacheHasPendingChanges = localStorage.getItem(getCacheKey('barber_track_sync_pending')) === 'true';
+                if (cacheHasPendingChanges) {
+                    await syncDataToCloud();
+                    return;
+                }
+                const snapshot = await firestore.collection('barbers').doc(currentUser.uid).collection('app').doc('data').get();
+                if (!snapshot.exists) {
+                    const legacyCuts = localStorage.getItem(STORAGE_KEY_CUTS);
+                    const legacyServices = localStorage.getItem(STORAGE_KEY_SERVICES);
+                    cuts = legacyCuts ? JSON.parse(legacyCuts) : [];
+                    services = legacyServices ? JSON.parse(legacyServices) : [...DEFAULT_SERVICES];
+                    saveDataToStorage();
+                    return;
+                }
+                const data = snapshot.data();
+                cuts = Array.isArray(data.cuts) ? data.cuts : [];
+                services = Array.isArray(data.services) && data.services.length ? data.services : [...DEFAULT_SERVICES];
+                localStorage.setItem(getCacheKey(STORAGE_KEY_CUTS), JSON.stringify(cuts));
+                localStorage.setItem(getCacheKey(STORAGE_KEY_SERVICES), JSON.stringify(services));
+                refreshInterface();
+            } catch (error) {
+                console.warn('Firebase no disponible; usando caché local:', error);
+                showToast('Modo sin conexión: datos locales');
+            }
+        }
+
+        async function syncDataToCloud() {
+            if (!firestore || !currentUser) return;
+            if (!navigator.onLine || cloudSyncInProgress) {
+                cloudSyncPending = true;
+                return;
+            }
+            cloudSyncInProgress = true;
+            try {
+                await firestore.collection('barbers').doc(currentUser.uid).collection('app').doc('data').set({
+                    cuts,
+                    services,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                localStorage.removeItem(getCacheKey('barber_track_sync_pending'));
+                cloudSyncPending = false;
+            } catch (error) {
+                cloudSyncPending = true;
+                console.error('No se pudo sincronizar con Firebase:', error);
+                showToast('Cambios guardados solo en este dispositivo');
+            } finally {
+                cloudSyncInProgress = false;
+                if (cloudSyncPending && navigator.onLine) syncDataToCloud();
+            }
+        }
+
+        function openAuthModal() {
+            const modal = document.getElementById('auth-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            document.getElementById('firebase-setup-note').classList.toggle('hidden', isFirebaseConfigured());
+            document.getElementById('auth-form').classList.toggle('hidden', Boolean(currentUser));
+            document.getElementById('auth-toggle').classList.toggle('hidden', Boolean(currentUser));
+            document.getElementById('auth-logout').classList.toggle('hidden', !currentUser);
+        }
+
+        function closeAuthModal() {
+            const modal = document.getElementById('auth-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function toggleAuthMode() {
+            isRegisterMode = !isRegisterMode;
+            document.getElementById('auth-title').textContent = isRegisterMode ? 'Crear cuenta' : 'Tu cuenta BarberTrack';
+            document.getElementById('auth-subtitle').textContent = isRegisterMode ? 'Tus datos quedarán guardados en la nube.' : 'Ingresá para sincronizar tus datos.';
+            document.getElementById('auth-submit').textContent = isRegisterMode ? 'Crear cuenta' : 'Ingresar';
+            document.getElementById('auth-toggle').textContent = isRegisterMode ? 'Ya tengo una cuenta' : 'Crear una cuenta';
+            document.getElementById('auth-password').autocomplete = isRegisterMode ? 'new-password' : 'current-password';
+        }
+
+        async function handleAuth(event) {
+            event.preventDefault();
+            if (!firebaseAuth) { document.getElementById('auth-error').textContent = 'Falta configurar Firebase en el archivo.'; document.getElementById('auth-error').classList.remove('hidden'); return; }
+            const email = document.getElementById('auth-email').value.trim();
+            const password = document.getElementById('auth-password').value;
+            const error = document.getElementById('auth-error');
+            error.classList.add('hidden');
+            try {
+                if (isRegisterMode) await firebaseAuth.createUserWithEmailAndPassword(email, password);
+                else await firebaseAuth.signInWithEmailAndPassword(email, password);
+            } catch (authError) {
+                error.textContent = authError.message;
+                error.classList.remove('hidden');
+            }
+        }
+
+        async function signOutUser() {
+            if (firebaseAuth) await firebaseAuth.signOut();
+            closeAuthModal();
+        }
+
+        // CONTROL DE PESTAÑAS
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.remove('text-amber-500');
+                btn.classList.add('text-gray-400');
+            });
+
+            const targetTab = document.getElementById(`tab-${tabId}`);
+            if (targetTab) {
+                targetTab.classList.add('active');
+            }
+
+            const targetBtn = document.getElementById(`nav-btn-${tabId}`);
+            if (targetBtn) {
+                targetBtn.classList.remove('text-gray-400');
+                targetBtn.classList.add('text-amber-500');
+            }
+
+            if (tabId === 'history') renderHistory();
+            if (tabId === 'pending') renderPendingPayments();
+            if (tabId === 'reports') renderCharts();
+        }
+
+        // DIBUJAR BOTONES DE SERVICIOS RÁPIDOS
+        function renderServiceButtons() {
+            const container = document.getElementById('services-buttons-container');
+            container.innerHTML = '';
+
+            services.forEach((service, index) => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.onclick = () => selectQuickService(service);
+                btn.className = `p-3 rounded-xl border border-gray-700 bg-dark-900/80 hover:border-amber-500 text-left transition-all active:scale-95 flex flex-col justify-between h-20 ${index === 0 ? 'ring-1 ring-amber-500/50' : ''}`;
+                btn.innerHTML = `
+                    <span class="text-xs font-bold text-gray-200 line-clamp-1">${service.name}</span>
+                    <span class="text-base font-black text-gold-400">$${service.price.toLocaleString('es-AR')}</span>
+                `;
+                container.appendChild(btn);
+            });
+
+            // Seleccionar por defecto el primer servicio
+            if (services.length > 0) {
+                selectQuickService(services[0]);
+            }
+        }
+
+        function selectQuickService(service) {
+            document.getElementById('cut-service-name').value = service.name;
+            document.getElementById('cut-price').value = service.price;
+        }
+
+        // SELECTOR DE MÉTODOS DE PAGO
+        function selectPaymentMethod(method) {
+            document.getElementById('cut-payment-method').value = method;
+            const buttons = ['Efectivo', 'Transferencia', 'Fiado'];
+            
+            buttons.forEach(m => {
+                const btn = document.getElementById(`pm-${m.toLowerCase()}`);
+                if (m === method) {
+                    btn.className = "pm-btn active py-2.5 px-3 rounded-xl border text-xs font-bold flex flex-col sm:flex-row items-center justify-center gap-1.5 transition-all bg-amber-500/10 border-amber-500 text-amber-400";
+                } else {
+                    btn.className = "pm-btn py-2.5 px-3 rounded-xl border border-gray-700 bg-dark-900 text-gray-400 text-xs font-bold flex flex-col sm:flex-row items-center justify-center gap-1.5 transition-all";
+                }
+            });
+        }
+
+        // REGISTRAR UN NUEVO CORTE
+        function handleRegisterCut(event) {
+            event.preventDefault();
+
+            const serviceName = document.getElementById('cut-service-name').value.trim();
+            const price = parseFloat(document.getElementById('cut-price').value) || 0;
+            const client = document.getElementById('cut-client').value.trim() || 'Cliente General';
+            const paymentMethod = document.getElementById('cut-payment-method').value;
+
+            const newCut = {
+                id: 'cut_' + Date.now(),
+                service: serviceName,
+                price: price,
+                client: client,
+                paymentMethod: paymentMethod,
+                timestamp: new Date().toISOString()
+            };
+
+            cuts.unshift(newCut);
+            saveDataToStorage();
+
+            // Limpiar campo de cliente
+            document.getElementById('cut-client').value = '';
+            showRegistrationSuccess(newCut);
+        }
+
+        function showRegistrationSuccess(cut) {
+            const overlay = document.getElementById('registration-success');
+            document.getElementById('registration-success-service').textContent = cut.service;
+            document.getElementById('registration-success-price').textContent = `$${cut.price.toLocaleString('es-AR')}`;
+            overlay.classList.remove('hidden');
+            overlay.classList.add('flex', 'active');
+        }
+
+        function closeRegistrationSuccess() {
+            const overlay = document.getElementById('registration-success');
+            overlay.classList.remove('active', 'flex');
+            overlay.classList.add('hidden');
+        }
+
+        // HELPERS PARA FECHAS Y MÉTRICAS
+        function isToday(date) {
+            const today = new Date();
+            return date.getDate() === today.getDate() &&
+                date.getMonth() === today.getMonth() &&
+                date.getFullYear() === today.getFullYear();
+        }
+
+        function isThisWeek(date) {
+            const now = new Date();
+            // Obtener el lunes de la semana actual
+            const dayOfWeek = now.getDay(); // 0: Dom, 1: Lun...
+            const distanceToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+            
+            const startOfWeek = new Date(now);
+            startOfWeek.setDate(now.getDate() - distanceToMonday);
+            startOfWeek.setHours(0, 0, 0, 0);
+
+            const endOfWeek = new Date(startOfWeek);
+            endOfWeek.setDate(startOfWeek.getDate() + 7);
+
+            return date >= startOfWeek && date < endOfWeek;
+        }
+
+        function isThisMonth(date) {
+            const today = new Date();
+            return date.getMonth() === today.getMonth() &&
+                date.getFullYear() === today.getFullYear();
+        }
+
+        // ACTUALIZAR DASHBOARD Y MÉTRICAS
+        function updateDashboard() {
+            let todayTotal = 0, todayCount = 0;
+            let weekTotal = 0, weekCount = 0;
+            let monthTotal = 0, monthCount = 0;
+            let pendingTotal = 0, pendingCount = 0;
+
+            cuts.forEach(cut => {
+                const cutDate = new Date(cut.timestamp);
+
+                if (isToday(cutDate)) {
+                    todayTotal += cut.price;
+                    todayCount++;
+                }
+                if (isThisWeek(cutDate)) {
+                    weekTotal += cut.price;
+                    weekCount++;
+                }
+                if (isThisMonth(cutDate)) {
+                    monthTotal += cut.price;
+                    monthCount++;
+                    if (cut.paymentMethod === 'Fiado') {
+                        pendingTotal += cut.price;
+                        pendingCount++;
+                    }
+                }
+            });
+
+            // Actualizar UI rápida
+            document.getElementById('quick-count-today').innerText = todayCount;
+            document.getElementById('quick-total-today').innerText = `$${todayTotal.toLocaleString('es-AR')}`;
+
+            // Actualizar Pestaña Resumen
+            document.getElementById('report-today-total').innerText = `$${todayTotal.toLocaleString('es-AR')}`;
+            document.getElementById('report-today-count').innerText = todayCount;
+
+            document.getElementById('report-week-total').innerText = `$${weekTotal.toLocaleString('es-AR')}`;
+            document.getElementById('report-week-count').innerText = weekCount;
+
+            document.getElementById('report-month-total').innerText = `$${monthTotal.toLocaleString('es-AR')}`;
+            document.getElementById('report-month-count').innerText = monthCount;
+            document.getElementById('report-pending-total').innerText = `$${pendingTotal.toLocaleString('es-AR')}`;
+            document.getElementById('report-pending-count').innerText = pendingCount;
+        }
+
+        // HISTORIAL Y FILTROS
+        function setFilterPayment(method) {
+            currentFilterPayment = method;
+            document.querySelectorAll('.filter-pm-btn').forEach(btn => {
+                btn.classList.remove('bg-amber-500', 'text-dark-900', 'active');
+                btn.classList.add('bg-dark-700', 'text-gray-300');
+            });
+
+            const activeBtn = document.getElementById(`filter-pm-${method.toLowerCase()}`);
+            if (activeBtn) {
+                activeBtn.classList.remove('bg-dark-700', 'text-gray-300');
+                activeBtn.classList.add('bg-amber-500', 'text-dark-900', 'active');
+            }
+            renderHistory();
+        }
+
+        function renderHistory() {
+            const container = document.getElementById('history-list-container');
+            const searchInput = document.getElementById('search-history').value.toLowerCase().trim();
+
+            container.innerHTML = '';
+
+            // Filtrar solo los del día de hoy para esta vista
+            let todayCuts = cuts.filter(cut => isToday(new Date(cut.timestamp)));
+
+            // Aplicar filtro de búsqueda
+            if (searchInput) {
+                todayCuts = todayCuts.filter(c => 
+                    c.client.toLowerCase().includes(searchInput) || 
+                    c.service.toLowerCase().includes(searchInput)
+                );
+            }
+
+            // Aplicar filtro de método de pago
+            if (currentFilterPayment !== 'ALL') {
+                todayCuts = todayCuts.filter(c => c.paymentMethod === currentFilterPayment);
+            }
+
+            if (todayCuts.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-10 bg-dark-800/50 rounded-2xl border border-gray-800/50">
+                        <i class="fa-solid fa-scissors text-3xl text-gray-600 mb-2"></i>
+                        <p class="text-gray-400 font-semibold text-sm">No hay registros para mostrar hoy.</p>
+                        <p class="text-xs text-gray-500 mt-1">Registra cortes en la primera pestaña.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            todayCuts.forEach(cut => {
+                const dateObj = new Date(cut.timestamp);
+                const timeFormatted = dateObj.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+
+                let paymentIcon = 'fa-money-bill-wave';
+                let paymentColor = 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20';
+                
+                if (cut.paymentMethod === 'Transferencia') {
+                    paymentIcon = 'fa-arrow-right-arrow-left';
+                    paymentColor = 'text-blue-400 bg-blue-500/10 border-blue-500/20';
+                } else if (cut.paymentMethod === 'Fiado') {
+                    paymentIcon = 'fa-hourglass-half';
+                    paymentColor = 'text-rose-400 bg-rose-500/10 border-rose-500/20';
+                }
+
+                const card = document.createElement('div');
+                card.className = "bg-dark-800 border border-gray-800/80 rounded-2xl p-3.5 flex items-center justify-between shadow-sm hover:border-gray-700 transition-colors";
+                card.innerHTML = `
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 rounded-xl bg-dark-900 border border-gray-700/60 flex items-center justify-center text-amber-500 font-bold text-sm">
+                            ${timeFormatted}
+                        </div>
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <h4 class="font-bold text-white text-sm">${cut.service}</h4>
+                                <span class="text-[10px] px-2 py-0.5 rounded-full border ${paymentColor} font-bold flex items-center gap-1">
+                                    <i class="fa-solid ${paymentIcon}"></i> ${cut.paymentMethod}
+                                </span>
+                            </div>
+                            <p class="text-xs text-gray-400 mt-0.5"><i class="fa-regular fa-user mr-1 text-gray-500"></i>${cut.client}</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-3">
+                        <span class="font-black text-gold-400 text-base">$${cut.price.toLocaleString('es-AR')}</span>
+                        <div class="flex items-center space-x-1">
+                            <button onclick="openEditModal('${cut.id}')" class="p-2 text-gray-400 hover:text-amber-400 transition-colors">
+                                <i class="fa-solid fa-pen text-xs"></i>
+                            </button>
+                            <button onclick="deleteCut('${cut.id}')" class="p-2 text-gray-400 hover:text-red-400 transition-colors">
+                                <i class="fa-solid fa-trash text-xs"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        // PAGOS PENDIENTES
+        function renderPendingPayments() {
+            const container = document.getElementById('pending-list-container');
+            const pendingCuts = cuts.filter(cut => cut.paymentMethod === 'Fiado').sort((first, second) => new Date(first.timestamp) - new Date(second.timestamp));
+            const total = pendingCuts.reduce((sum, cut) => sum + Number(cut.price || 0), 0);
+            document.getElementById('pending-total-badge').textContent = `$${total.toLocaleString('es-AR')}`;
+
+            if (!pendingCuts.length) {
+                container.innerHTML = `<div class="text-center py-10 bg-dark-800/50 rounded-2xl border border-gray-800/50"><i class="fa-solid fa-circle-check text-3xl text-emerald-400 mb-2"></i><p class="text-gray-300 font-semibold text-sm">No hay pagos pendientes.</p><p class="text-xs text-gray-500 mt-1">Los cortes fiados aparecerán aquí.</p></div>`;
+                return;
+            }
+
+            container.innerHTML = pendingCuts.map(cut => {
+                const date = new Date(cut.timestamp).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' });
+                return `<article class="bg-dark-800 border border-rose-500/20 rounded-2xl p-3.5"><div class="flex items-start justify-between gap-3"><div><p class="font-bold text-white text-sm">${cut.client}</p><p class="text-xs text-gray-400 mt-0.5">${cut.service} · ${date}</p></div><span class="font-black text-rose-400 text-base">$${cut.price.toLocaleString('es-AR')}</span></div><div class="mt-3 pt-3 border-t border-gray-700/60 flex items-center justify-between gap-2"><span class="text-[10px] uppercase tracking-wide font-bold text-gray-500">Marcar cobrado</span><div class="flex gap-2"><button onclick="markPendingAsPaid('${cut.id}', 'Efectivo')" class="rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1.5 text-xs font-bold text-emerald-400"><i class="fa-solid fa-money-bill-wave mr-1"></i>Efectivo</button><button onclick="markPendingAsPaid('${cut.id}', 'Transferencia')" class="rounded-lg bg-blue-500/10 border border-blue-500/20 px-2.5 py-1.5 text-xs font-bold text-blue-400"><i class="fa-solid fa-arrow-right-arrow-left mr-1"></i>Transfer.</button></div></div></article>`;
+            }).join('');
+        }
+
+        function markPendingAsPaid(cutId, paymentMethod) {
+            const cut = cuts.find(item => item.id === cutId);
+            if (!cut || cut.paymentMethod !== 'Fiado') return;
+            cut.paymentMethod = paymentMethod;
+            saveDataToStorage();
+            renderPendingPayments();
+            showToast(`Pago registrado por ${paymentMethod.toLowerCase()}`);
+        }
+
+        // EDITAR Y ELIMINAR CORTE
+        function openEditModal(cutId) {
+            const cut = cuts.find(c => c.id === cutId);
+            if (!cut) return;
+
+            document.getElementById('edit-cut-id').value = cut.id;
+            document.getElementById('edit-cut-service').value = cut.service;
+            document.getElementById('edit-cut-price').value = cut.price;
+            document.getElementById('edit-cut-client').value = cut.client;
+            document.getElementById('edit-cut-payment').value = cut.paymentMethod;
+
+            const modal = document.getElementById('modal-edit');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeEditModal() {
+            const modal = document.getElementById('modal-edit');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function handleSaveEditCut(event) {
+            event.preventDefault();
+            const id = document.getElementById('edit-cut-id').value;
+            const index = cuts.findIndex(c => c.id === id);
+
+            if (index !== -1) {
+                cuts[index].service = document.getElementById('edit-cut-service').value.trim();
+                cuts[index].price = parseFloat(document.getElementById('edit-cut-price').value) || 0;
+                cuts[index].client = document.getElementById('edit-cut-client').value.trim() || 'Cliente General';
+                cuts[index].paymentMethod = document.getElementById('edit-cut-payment').value;
+
+                saveDataToStorage();
+                renderHistory();
+                closeEditModal();
+                showToast('Registro actualizado');
+            }
+        }
+
+        function deleteCut(cutId) {
+            showConfirmModal(
+                "¿Eliminar este registro?",
+                "Se eliminará permanentemente de tu historial de hoy.",
+                () => {
+                    cuts = cuts.filter(c => c.id !== cutId);
+                    saveDataToStorage();
+                    renderHistory();
+                    showToast('Corte eliminado');
+                }
+            );
+        }
+
+        // CONFIGURACIÓN DE PRECIOS POR DEFECTO
+        function renderConfigServicesList() {
+            const container = document.getElementById('config-services-list');
+            container.innerHTML = '';
+
+            services.forEach(service => {
+                const item = document.createElement('div');
+                item.className = "flex items-center justify-between p-2.5 bg-dark-900 border border-gray-700/60 rounded-xl text-sm";
+                item.innerHTML = `
+                    <span class="font-bold text-gray-200">${service.name}</span>
+                    <div class="flex items-center gap-3">
+                        <span class="font-extrabold text-amber-400">$${service.price.toLocaleString('es-AR')}</span>
+                        <button onclick="deleteConfigService('${service.id}')" class="text-gray-500 hover:text-red-400 transition-colors p-1" aria-label="Eliminar ${service.name}">
+                            <i class="fa-solid fa-xmark text-sm"></i>
+                        </button>
+                    </div>
+                `;
+                container.appendChild(item);
+            });
+        }
+
+        function handleSaveServiceConfig(event) {
+            event.preventDefault();
+            const name = document.getElementById('config-service-name').value.trim();
+            const price = parseFloat(document.getElementById('config-service-price').value) || 0;
+
+            if (name && price >= 0) {
+                const existingService = services.find(service => service.name.toLowerCase() === name.toLowerCase());
+                if (existingService) {
+                    existingService.price = price;
+                } else {
+                    services.push({ id: 's_' + Date.now(), name, price });
+                }
+                saveDataToStorage();
+                renderServiceButtons();
+                renderConfigServicesList();
+                document.getElementById('config-service-name').value = '';
+                document.getElementById('config-service-price').value = '';
+                showToast(existingService ? 'Precio del servicio actualizado' : 'Servicio añadido');
+            }
+        }
+
+        function deleteConfigService(serviceId) {
+            if (services.length === 1) { showToast('Debes conservar al menos un servicio'); return; }
+            services = services.filter(service => service.id !== serviceId);
+            saveDataToStorage();
+            renderServiceButtons();
+            renderConfigServicesList();
+            showToast('Servicio eliminado');
+        }
+
+        // GRÁFICOS Y REPORTES (CHART.JS)
+        function renderCharts() {
+            const monthCuts = cuts.filter(c => isThisMonth(new Date(c.timestamp)));
+
+            // 1. Métodos de Pago
+            const paymentTotals = { 'Efectivo': 0, 'Transferencia': 0, 'Fiado': 0 };
+            monthCuts.forEach(c => {
+                if (paymentTotals[c.paymentMethod] !== undefined) {
+                    paymentTotals[c.paymentMethod] += c.price;
+                }
+            });
+
+            const ctxPayment = document.getElementById('chart-payment-methods').getContext('2d');
+            if (chartPaymentInstance) chartPaymentInstance.destroy();
+
+            chartPaymentInstance = new Chart(ctxPayment, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Efectivo', 'Transferencia', 'Fiado'],
+                    datasets: [{
+                        data: [paymentTotals['Efectivo'], paymentTotals['Transferencia'], paymentTotals['Fiado']],
+                        backgroundColor: ['#10B981', '#3B82F6', '#FB7185'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { color: '#9CA3AF', font: { size: 11, weight: 'bold' } }
+                        }
+                    }
+                }
+            });
+
+            // 2. Servicios más populares
+            const serviceCounts = {};
+            monthCuts.forEach(c => {
+                serviceCounts[c.service] = (serviceCounts[c.service] || 0) + 1;
+            });
+
+            const ctxServices = document.getElementById('chart-top-services').getContext('2d');
+            if (chartServicesInstance) chartServicesInstance.destroy();
+
+            chartServicesInstance = new Chart(ctxServices, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(serviceCounts),
+                    datasets: [{
+                        label: 'Cantidad de Cortes',
+                        data: Object.values(serviceCounts),
+                        backgroundColor: '#F59E0B',
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: { ticks: { color: '#9CA3AF', font: { size: 10 } }, grid: { display: false } },
+                        y: { ticks: { color: '#9CA3AF', stepSize: 1 }, grid: { color: '#1F2937' } }
+                    }
+                }
+            });
+        }
+
+        // MOCK DATA Y BORRADO COMPLETO
+        function loadMockData(showNotification = true) {
+            const now = new Date();
+            const mockCuts = [];
+
+            // Generar datos para los últimos 20 días
+            for (let i = 0; i < 25; i++) {
+                const randomDaysAgo = Math.floor(Math.random() * 20);
+                const cutDate = new Date(now);
+                cutDate.setDate(now.getDate() - randomDaysAgo);
+                cutDate.setHours(Math.floor(Math.random() * 8) + 10, Math.floor(Math.random() * 59));
+
+                const randomService = DEFAULT_SERVICES[Math.floor(Math.random() * DEFAULT_SERVICES.length)];
+                const randomPayment = ['Efectivo', 'Transferencia'][Math.floor(Math.random() * 2)];
+                const randomClients = ['Carlos Ruiz', 'Mateo Gómez', 'Lucas Silva', 'Nicolás Diaz', 'Tomás Fernández', 'Diego Paz'];
+
+                mockCuts.push({
+                    id: 'mock_' + i + '_' + Date.now(),
+                    service: randomService.name,
+                    price: randomService.price,
+                    client: randomClients[Math.floor(Math.random() * randomClients.length)],
+                    paymentMethod: randomPayment,
+                    timestamp: cutDate.toISOString()
+                });
+            }
+
+            cuts = mockCuts;
+            saveDataToStorage();
+            renderHistory();
+            if (showNotification) showToast('Datos de prueba cargados');
+        }
+
+        function confirmClearAllData() {
+            showConfirmModal(
+                "¿Borrar TODOS los datos?",
+                "Esta acción eliminará de forma permanente todo el historial guardado.",
+                () => {
+                    cuts = [];
+                    saveDataToStorage();
+                    renderHistory();
+                    showToast('Se han eliminado todos los registros');
+                }
+            );
+        }
+
+        // UTILS: MODAL CONFIRM Y TOAST
+        function showConfirmModal(title, message, onAccept) {
+            document.getElementById('confirm-title').innerText = title;
+            document.getElementById('confirm-message').innerText = message;
+
+            const modal = document.getElementById('modal-confirm');
+            const btnAccept = document.getElementById('confirm-btn-accept');
+            const btnCancel = document.getElementById('confirm-btn-cancel');
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+
+            btnAccept.onclick = () => {
+                onAccept();
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            };
+
+            btnCancel.onclick = () => {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            };
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-message').innerText = message;
+            
+            toast.classList.remove('opacity-0', 'pointer-events-none', 'translate-y-[-20px]');
+            toast.classList.add('opacity-100', 'translate-y-0');
+
+            setTimeout(() => {
+                toast.classList.remove('opacity-100', 'translate-y-0');
+                toast.classList.add('opacity-0', 'pointer-events-none', 'translate-y-[-20px]');
+            }, 2500);
+        }
+    </script>
+</body>
+</html>
