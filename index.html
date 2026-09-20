@@ -255,6 +255,14 @@
         <section id="tab-history" class="tab-content space-y-4">
             <!-- Search & Filter Controls -->
             <div class="bg-dark-800 p-3.5 rounded-2xl border border-gray-800 space-y-3">
+                <div class="flex items-center justify-between gap-2">
+                    <label for="history-date" class="mb-0 text-xs font-bold uppercase tracking-wider text-gray-400"><i class="fa-solid fa-calendar-day mr-1.5 text-amber-500"></i>Ver cortes del día</label>
+                    <button onclick="setHistoryDateToToday()" type="button" class="rounded-lg border border-gray-700 bg-dark-700 px-2.5 py-1 text-[10px] font-bold text-gray-300 transition hover:border-amber-500 hover:text-amber-400">Hoy</button>
+                </div>
+                <div class="flex items-center gap-2">
+                    <input type="date" id="history-date" onchange="renderHistory()" class="w-full rounded-xl border border-gray-700 bg-dark-900 px-3 py-2.5 text-sm text-white outline-none focus:border-amber-500">
+                    <span id="history-date-label" class="hidden whitespace-nowrap text-xs font-bold text-amber-400 sm:block"></span>
+                </div>
                 <div class="relative">
                     <span class="absolute left-3.5 top-3 text-gray-500 text-sm"><i class="fa-solid fa-magnifying-glass"></i></span>
                     <input type="text" id="search-history" oninput="renderHistory()" placeholder="Buscar cliente o servicio..." 
@@ -577,6 +585,7 @@
         let cuts = [];
         let services = [];
         let currentFilterPayment = 'ALL';
+        let selectedHistoryDate = getLocalDateKey(new Date());
         let chartPaymentInstance = null;
         let chartServicesInstance = null;
         let firebaseAuth = null;
@@ -911,6 +920,19 @@
                 date.getFullYear() === today.getFullYear();
         }
 
+        function getLocalDateKey(date) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+        function setHistoryDateToToday() {
+            selectedHistoryDate = getLocalDateKey(new Date());
+            document.getElementById('history-date').value = selectedHistoryDate;
+            renderHistory();
+        }
+
         function isThisWeek(date) {
             const now = new Date();
             // Obtener el lunes de la semana actual
@@ -997,11 +1019,15 @@
         function renderHistory() {
             const container = document.getElementById('history-list-container');
             const searchInput = document.getElementById('search-history').value.toLowerCase().trim();
+            const dateInput = document.getElementById('history-date');
+            selectedHistoryDate = dateInput.value || getLocalDateKey(new Date());
+            dateInput.value = selectedHistoryDate;
+            document.getElementById('history-date-label').textContent = selectedHistoryDate === getLocalDateKey(new Date()) ? 'Hoy' : new Date(`${selectedHistoryDate}T12:00:00`).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' });
 
             container.innerHTML = '';
 
-            // Filtrar solo los del día de hoy para esta vista
-            let todayCuts = cuts.filter(cut => isToday(new Date(cut.timestamp)));
+            // Filtrar por la fecha elegida, usando la fecha local del registro.
+            let todayCuts = cuts.filter(cut => getLocalDateKey(new Date(cut.timestamp)) === selectedHistoryDate);
 
             // Aplicar filtro de búsqueda
             if (searchInput) {
@@ -1020,8 +1046,8 @@
                 container.innerHTML = `
                     <div class="text-center py-10 bg-dark-800/50 rounded-2xl border border-gray-800/50">
                         <i class="fa-solid fa-scissors text-3xl text-gray-600 mb-2"></i>
-                        <p class="text-gray-400 font-semibold text-sm">No hay registros para mostrar hoy.</p>
-                        <p class="text-xs text-gray-500 mt-1">Registra cortes en la primera pestaña.</p>
+                        <p class="text-gray-400 font-semibold text-sm">No hay registros para este día.</p>
+                        <p class="text-xs text-gray-500 mt-1">Elegí otra fecha o registrá un corte en la primera pestaña.</p>
                     </div>
                 `;
                 return;
