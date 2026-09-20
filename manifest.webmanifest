@@ -2,7 +2,7 @@
   "name": "BarberTrack - Control para barberos",
   "short_name": "BarberTrack",
   "description": "Registro de cortes, cobros y pagos pendientes para barberos.",
-  "start_url": "./barbertrack_gesti_n_para_barberos.html",
+  "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",

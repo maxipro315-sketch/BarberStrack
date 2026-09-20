@@ -1,7 +1,7 @@
-const CACHE_NAME = 'barbertrack-shell-v2';
+const CACHE_NAME = 'barbertrack-shell-v3';
 const APP_SHELL = [
   './',
-  './barbertrack_gesti_n_para_barberos.html',
+  './index.html',
   './manifest.webmanifest',
   './icons/barbertrack-192.png',
   './icons/barbertrack-512.png',
