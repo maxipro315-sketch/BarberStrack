@@ -302,7 +302,11 @@
             <!-- Date Filter Header -->
             <div class="flex items-center justify-between bg-dark-800 p-3 rounded-2xl border border-gray-800">
                 <span class="text-xs font-bold uppercase text-gray-400"><i class="fa-solid fa-chart-line text-amber-500 mr-1.5"></i> Resumen de Rendimiento</span>
-                <span class="text-xs font-semibold bg-amber-500/10 text-amber-400 px-2.5 py-1 rounded-full border border-amber-500/20" id="current-month-badge">Mes Actual</span>
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="changeReportMonth(-1)" aria-label="Ver mes anterior" title="Mes anterior" class="h-8 w-8 rounded-lg border border-gray-700 text-gray-300 transition hover:border-amber-500/50 hover:text-amber-400"><i class="fa-solid fa-chevron-left"></i></button>
+                    <span class="min-w-28 text-center text-xs font-semibold bg-amber-500/10 text-amber-400 px-2.5 py-1.5 rounded-full border border-amber-500/20" id="current-month-badge">Mes Actual</span>
+                    <button type="button" onclick="changeReportMonth(1)" aria-label="Ver mes siguiente" title="Mes siguiente" class="h-8 w-8 rounded-lg border border-gray-700 text-gray-300 transition hover:border-amber-500/50 hover:text-amber-400"><i class="fa-solid fa-chevron-right"></i></button>
+                </div>
             </div>
 
             <!-- Metric Cards (Hoy / Semana / Mes) -->
@@ -337,7 +341,7 @@
                         <i class="fa-solid fa-calendar-days"></i>
                     </div>
                     <div class="relative z-10">
-                        <span class="text-xs font-bold text-emerald-400 tracking-wider uppercase">ESTE MES</span>
+                        <span class="text-xs font-bold text-emerald-400 tracking-wider uppercase" id="report-month-label">ESTE MES</span>
                         <h3 class="text-2xl font-extrabold text-gold-400 mt-1" id="report-month-total">$0</h3>
                         <p class="text-xs text-gray-400 mt-1 font-medium"><span id="report-month-count" class="text-white font-bold">0</span> cortes realizados</p>
                     </div>
@@ -348,7 +352,7 @@
                     <div class="relative z-10">
                         <span class="text-xs font-bold text-rose-400 tracking-wider uppercase">PENDIENTE</span>
                         <h3 class="text-2xl font-extrabold text-rose-400 mt-1" id="report-pending-total">$0</h3>
-                        <p class="text-xs text-gray-400 mt-1 font-medium"><span id="report-pending-count" class="text-white font-bold">0</span> fiados este mes</p>
+                        <p class="text-xs text-gray-400 mt-1 font-medium"><span id="report-pending-count" class="text-white font-bold">0</span> fiados <span id="report-pending-period">este mes</span></p>
                     </div>
                 </div>
             </div>
@@ -585,6 +589,7 @@
         let cuts = [];
         let services = [];
         let currentFilterPayment = 'ALL';
+        let selectedReportMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
         let selectedHistoryDate = getLocalDateKey(new Date());
         let chartPaymentInstance = null;
         let chartServicesInstance = null;
@@ -677,8 +682,7 @@
             const formatted = now.toLocaleDateString('es-ES', options);
             document.getElementById('header-date').innerText = formatted.charAt(0).toUpperCase() + formatted.slice(1);
             
-            const monthOptions = { month: 'long', year: 'numeric' };
-            document.getElementById('current-month-badge').innerText = now.toLocaleDateString('es-ES', monthOptions).toUpperCase();
+            updateReportMonthLabel();
         }
 
         // CARGA Y GUARDADO DE DATOS (LOCALSTORAGE)
@@ -949,10 +953,32 @@
             return date >= startOfWeek && date < endOfWeek;
         }
 
-        function isThisMonth(date) {
-            const today = new Date();
-            return date.getMonth() === today.getMonth() &&
-                date.getFullYear() === today.getFullYear();
+        function isSelectedReportMonth(date) {
+            return date.getMonth() === selectedReportMonth.getMonth() &&
+                date.getFullYear() === selectedReportMonth.getFullYear();
+        }
+
+        function updateReportMonthLabel() {
+            const monthOptions = { month: 'long', year: 'numeric' };
+            const monthLabel = selectedReportMonth.toLocaleDateString('es-AR', monthOptions);
+            const currentMonth = new Date();
+            const isCurrentMonth = selectedReportMonth.getMonth() === currentMonth.getMonth() &&
+                selectedReportMonth.getFullYear() === currentMonth.getFullYear();
+
+            document.getElementById('current-month-badge').innerText = monthLabel.toUpperCase();
+            document.getElementById('report-month-label').innerText = isCurrentMonth ? 'ESTE MES' : monthLabel.toUpperCase();
+            document.getElementById('report-pending-period').innerText = isCurrentMonth ? 'este mes' : `en ${monthLabel}`;
+        }
+
+        function changeReportMonth(offset) {
+            const nextMonth = new Date(selectedReportMonth.getFullYear(), selectedReportMonth.getMonth() + offset, 1);
+            const currentMonth = new Date();
+            const currentMonthStart = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
+            if (nextMonth > currentMonthStart) return;
+
+            selectedReportMonth = nextMonth;
+            updateDashboard();
+            if (document.getElementById('tab-reports').classList.contains('active')) renderCharts();
         }
 
         // ACTUALIZAR DASHBOARD Y MÉTRICAS
@@ -973,7 +999,7 @@
                     weekTotal += cut.price;
                     weekCount++;
                 }
-                if (isThisMonth(cutDate)) {
+                if (isSelectedReportMonth(cutDate)) {
                     monthTotal += cut.price;
                     monthCount++;
                     if (cut.paymentMethod === 'Fiado') {
@@ -994,6 +1020,7 @@
             document.getElementById('report-week-total').innerText = `$${weekTotal.toLocaleString('es-AR')}`;
             document.getElementById('report-week-count').innerText = weekCount;
 
+            updateReportMonthLabel();
             document.getElementById('report-month-total').innerText = `$${monthTotal.toLocaleString('es-AR')}`;
             document.getElementById('report-month-count').innerText = monthCount;
             document.getElementById('report-pending-total').innerText = `$${pendingTotal.toLocaleString('es-AR')}`;
@@ -1234,7 +1261,7 @@
 
         // GRÁFICOS Y REPORTES (CHART.JS)
         function renderCharts() {
-            const monthCuts = cuts.filter(c => isThisMonth(new Date(c.timestamp)));
+            const monthCuts = cuts.filter(c => isSelectedReportMonth(new Date(c.timestamp)));
 
             // 1. Métodos de Pago
             const paymentTotals = { 'Efectivo': 0, 'Transferencia': 0, 'Fiado': 0 };
